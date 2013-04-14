@@ -25,7 +25,7 @@ if not torrent_files:
 upload_count = 0
 client = Client(address=args.server, user=args.user, password=args.password)
 for path in torrent_files:
-  print('Adding {}'.format(path))
+  print('Adding {}'.format(path.encode('utf-8')))
   try:
     torrent = client.add_torrent('file://' + path)
     upload_count += 1
