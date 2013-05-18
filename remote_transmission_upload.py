@@ -27,7 +27,9 @@ client = Client(address=args.server, user=args.user, password=args.password)
 for path in torrent_files:
   print('Adding {}'.format(path.encode('utf-8')))
   try:
-    torrent = client.add_torrent('file://' + path)
+    with open(path, 'rb') as torrent_file:
+      encoded_file = torrent_file.read().encode('base64')
+    torrent = client.add_torrent(encoded_file)
     upload_count += 1
     print('> Started {}'.format(str(torrent).split(None, 1)[1].strip('"')))
     send2trash(path)
