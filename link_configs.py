@@ -1,54 +1,64 @@
 #!/usr/bin/env python
 
 from argparse import ArgumentParser
-from os import listdir, remove, symlink
-from os.path import basename, expanduser, isdir, isfile, islink, join, lexists
+from os import remove
+from os.path import lexists
+from path import path
 from shutil import rmtree
 
-user_home = expanduser('~')
-config_root = join(user_home, 'Dropbox', 'Config')
-
 parser = ArgumentParser(description='Symlink config files into system locations.')
-parser.add_argument('-o', '--overwrite', help='overwrite existing files when linking', action='store_true')
+parser.add_argument('--directory', default='~/Dropbox/Config', help='directory containing config files (defaults to ~/Dropbox/Config)')
+parser.add_argument('--dry-run', action='store_true', help='print intended actions instead of actually performing them')
+parser.add_argument('--overwrite', action='store_true', help='overwrite existing files when linking')
 args = parser.parse_args()
 
-def listdir_visible(path):
-  return [f for f in listdir(path) if f[0] != '.']
+config_root = path(args.directory).expand()
+home = path('~').expand()
+
+def listdir_visible(p):
+  return [f for f in p.listdir() if not f.name.startswith('.')]
 
 def link(source, target):
   if lexists(target):
-    if not args.overwrite:
+    if args.overwrite is False:
       print('Exists\t{}'.format(target))
       return
     else:
-      if islink(target):
-        remove(target)
-        print('Removed link\t{}'.format(target))
-      elif isfile(target):
-        remove(target)
-        print('Removed file\t{}'.format(target))
-      elif isdir(target):
-        rmtree(target)
-        print('Removed dir\t{}'.format(target))
-  symlink(source, target)
-  print('Created link\t{} -> {}'.format(target, source))
+      type_to_remove = None
+      removal_fn = None
+      if target.islink():
+        type_to_remove = 'link'
+        removal_fn = remove
+      elif target.isfile():
+        type_to_remove = 'file'
+        removal_fn = remove
+      elif target.isdir():
+        type_to_remove = 'dir'
+        removal_fn = rmtree
+      if type_to_remove is not None and removal_fn is not None:
+        if args.dry_run is True:
+          print('Would have removed {}\t{}'.format(type_to_remove, target))
+        else:
+          removal_fn(target)
+          print('Removed {}\t{}'.format(type_to_remove, target))
+  if args.dry_run is True:
+    print('Would have created link\t{} -> {}'.format(target, source))
+  else:
+    source.symlink(target)
+    print('Created link\t{} -> {}'.format(target, source))
 
 def link_dotfiles():
-  source = join(config_root, 'dotfiles')
-  for f in listdir_visible(source):
-    link(join(source, f), join(user_home, '.' + f))
+  for f in listdir_visible(config_root / 'dotfiles'):
+    link(f, home / '.{}'.format(f.name))
 
 def link_preferences():
-  source = join(config_root, 'preferences')
-  for f in listdir_visible(source):
-    link(join(source, f), join(user_home, 'Library', 'Preferences', f))
+  for f in listdir_visible(config_root / 'preferences'):
+    link(f, home / 'Library' / 'Preferences' / f.name)
 
 def link_support():
-  source = join(config_root, 'support')
-  for d in listdir_visible(source):
-    d_path = join(source, d)
-    for f in listdir_visible(d_path):
-      link(join(d_path, f), join(user_home, 'Library', 'Application Support', d, f))
+  for d in listdir_visible(config_root / 'support'):
+    for f in listdir_visible(d):
+      link(f, home / 'Library' / 'Application Support' / d.name / f.name)
 
 if __name__ == '__main__':
   link_dotfiles()

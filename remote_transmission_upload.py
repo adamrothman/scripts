@@ -6,36 +6,34 @@ from path import path
 from send2trash import send2trash
 from transmissionrpc import Client, TransmissionError
 
-torrents_root = path('~').expand() / 'Downloads'
-
-parser = ArgumentParser(description='Upload .torrent files to a remote Transmission server.')
-parser.add_argument('server', help='URL of Transmission server')
-parser.add_argument('user', help='Transmission user')
-parser.add_argument('password', help='Transmission password')
-if len(sys.argv) != 4:
-  parser.print_help()
-  sys.exit(-1)
+parser = ArgumentParser(description='Upload .torrent files to a Transmission server.')
+parser.add_argument('-d', '--directory', default='~/Downloads', help='directory to search for .torrent files (defaults to ~/Downloads)')
+server_group = parser.add_argument_group('Transmission server arguments')
+server_group.add_argument('--host', required=True, help='Transmission host')
+server_group.add_argument('--port', type=int, default=9091, help='Transmission port (defaults to 9091)')
+server_group.add_argument('--user', required=True, help='Transmission user')
+server_group.add_argument('--password', required=True, help='Transmission password')
 args = parser.parse_args()
 
-torrent_files = torrents_root.glob('*.torrent')
-if not torrent_files:
-  print('No .torrent files in ~/Downloads')
-  sys.exit(-1)  
+if __name__ == '__main__':
+  directory = path(args.directory).expand()
+  torrent_files = directory.files('*.torrent')
+  if not torrent_files:
+    print('No .torrent files found in {}'.format(directory))
+    sys.exit(-1)
 
-upload_count = 0
-client = Client(address=args.server, user=args.user, password=args.password)
-for path in torrent_files:
-  print('Adding {}'.format(path.encode('utf-8')))
-  try:
-    with open(path, 'rb') as torrent_file:
-      encoded_file = torrent_file.read().encode('base64')
-    torrent = client.add_torrent(encoded_file)
-    upload_count += 1
-    print('> Started {}'.format(str(torrent).split(None, 1)[1].strip('"')))
-    send2trash(path)
-    print('> Trashed file')
-  except TransmissionError as e:
-    print('> {}'.format(e))
-  print('')
+  client = Client(address=args.host, port=args.port, user=args.user, password=args.password)
+  upload_count = 0
+  for path in torrent_files:
+    print('Adding {}'.format(path.encode('utf-8')))
+    try:
+      torrent = client.add_torrent('file://' + path)
+      upload_count += 1
+      print('> Started {}'.format(str(torrent).split(None, 1)[1].strip('"')))
+      send2trash(path)
+      print('> Trashed file')
+    except TransmissionError as e:
+      print('> {}'.format(e))
+    print('')
 
-print('Uploaded {} file{}'.format(upload_count, 's' if upload_count != 1 else ''))
+  print('Uploaded {} file{}'.format(upload_count, 's' if upload_count != 1 else ''))
