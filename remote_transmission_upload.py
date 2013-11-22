@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
-
 import sys
 from argparse import ArgumentParser
+from getpass import getpass, getuser
 
 from blessings import Terminal
 from path import path
 from send2trash import send2trash
 from transmissionrpc import Client, TransmissionError
 
-if __name__ == '__main__':
+
+def upload_torrents():
   parser = ArgumentParser(description='Upload .torrent files to a Transmission server.')
-  file_group = parser.add_argument_group('file arguments')
-  file_group.add_argument('-d', '--directory', default='~/Downloads', help='directory to search for .torrent files (defaults to ~/Downloads)')
-  file_group.add_argument('-k', '--keep', action='store_true', help='do not trash .torrent files after uploading')
-  server_group = parser.add_argument_group('server arguments')
-  server_group.add_argument('--host', required=True, help='Transmission host')
-  server_group.add_argument('--port', type=int, default=9091, help='Transmission port (defaults to 9091)')
-  server_group.add_argument('--user', required=True, help='Transmission user')
-  server_group.add_argument('--password', required=True, help='Transmission password')
+
+  parser.add_argument('host', type=str, help='Transmission host[:port] (port defaults to 9091)')
+
+  parser.add_argument('-u', '--user', type=str, default=getuser(), help='Transmission username (defaults to current user)')
+  parser.add_argument('-d', '--directory', type=str, default='~/Downloads', help='directory to search for .torrent files (defaults to ~/Downloads)')
+  parser.add_argument('-k', '--keep', action='store_true', help='do not trash .torrent files after uploading')
+
   args = parser.parse_args()
-  
   t = Terminal()
 
   directory = path(args.directory).expand()
@@ -29,16 +28,28 @@ if __name__ == '__main__':
     print(t.bold_bright_green(' Found {}'.format(len(torrent_files))))
   else:
     print(t.bold_bright_red(' None found'))
-    sys.exit(-1)
+    return
 
-  client = Client(address=args.host, port=args.port, user=args.user, password=args.password)
+  password = getpass('\n{}\'s password: '.format(t.bold(args.user)))
+
+  try:
+    if ':' in args.host:
+      hostname, port = args.host.split(':')
+      client = Client(address=hostname, port=port, user=args.user, password=password)
+    else:
+      client = Client(address=args.host, user=args.user, password=password)
+    print(t.bold_bright_green('Connected'))
+  except TransmissionError as e:
+    print(t.bold_bright_red('Connection failed') + ' to Transmission at ' + t.bold(args.host))
+    return
+
   uploaded, failed = [], []
 
   # pad the index so that the brackets are all vertically aligned
   width = len(str(len(torrent_files)))
 
   for i, f in enumerate(torrent_files):
-    prefix = ('[{:>' + str(width) + '}]').format(i + 1)
+    prefix = ('[{:>{width}}]').format(i + 1, width=width)
     print('\n' + t.bold(prefix + ' Uploading') + '\t' + f.name)
     try:
       torrent = client.add_torrent('file://' + f)
@@ -66,3 +77,7 @@ if __name__ == '__main__':
       t.bold_bright_red(str(len(failed))),
       's' if len(failed) != 1 else ''
     ))
+
+
+if __name__ == '__main__':
+  upload_torrents()
