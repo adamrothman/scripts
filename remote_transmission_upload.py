@@ -2,9 +2,10 @@
 import sys
 from argparse import ArgumentParser
 from getpass import getpass, getuser
+from os.path import expanduser, expandvars, normpath
+from pathlib import Path
 
 from blessings import Terminal
-from path import path
 from send2trash import send2trash
 from transmissionrpc import Client, TransmissionError
 
@@ -21,9 +22,9 @@ def upload_torrents():
   args = parser.parse_args()
   t = Terminal()
 
-  directory = path(args.directory).expand()
-  print('\nScanning {} for {} files...'.format(t.bold(directory), t.bold('.torrent')), end='')
-  torrent_files = directory.files('*.torrent')
+  directory = Path(normpath(expanduser(expandvars(args.directory)))).resolve()
+  print('\nScanning {} for {} files...'.format(t.bold(str(directory)), t.bold('.torrent')), end='')
+  torrent_files = sorted(directory.glob('*.torrent'))
   if torrent_files:
     print(t.bold_bright_green(' Found {}'.format(len(torrent_files))))
   else:
@@ -52,7 +53,7 @@ def upload_torrents():
     prefix = ('[{:>{width}}]').format(i + 1, width=width)
     print('\n' + t.bold(prefix + ' Uploading') + '\t' + f.name)
     try:
-      torrent = client.add_torrent('file://' + f)
+      torrent = client.add_torrent('file://' + str(f))
       uploaded.append(f)
       print(t.bold_bright_green(prefix + ' Started') + '\t' + t.bright_cyan(torrent.name))
     except TransmissionError as e:
@@ -61,7 +62,8 @@ def upload_torrents():
 
   if not args.keep:
     # convert to list to force iteration
-    list(map(send2trash, uploaded))
+    trash = lambda f: send2trash(str(f))
+    list(map(trash, uploaded))
 
   print('')
 
